@@ -1,0 +1,23 @@
+---
+title: "CookBook"
+author: "Krishna Vaidyanathan"
+date: "October 25, 2015"
+output: html_document
+---
+
+# *Getting and Cleaning Data
+## Codebook for gathering and tidying data
+
+### Analysis method
+ - dplyr library is used for data analysis in this assignment
+ - Both training and test data sets are respectively collated as data frames
+ - They are given accurante column names as read from the the features document
+ - Using rbind both train and test data frames are combined
+ - The column names are coverted to R friendly names, without sacrificing the information
+ - The filtered data that contains only "mean" and "std" is created
+ - A tidy data is created using a select query
+ - Appropriate labels are assigned to the activity_labels by merging with the information provided in `activity_labels.txt`
+ - The final filtered data is written to the `run_data_summary.txt` file
+ 
+ ### Additional information
+ 1. Background information for the data sets can be obtained at http://archive.ics.uci.edu/ml/datasets/Human+Activity+Recognition+Using+Smartphones
