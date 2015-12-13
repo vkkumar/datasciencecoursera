@@ -1,0 +1,198 @@
+---
+title: "Coursera Practical Machine Learning - The Course Project"
+author: "Krishna Vaidyanathan"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+
+## Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+## Input Data
+The training data for this project are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har. The data was downloaded to hard drive for this model.
+
+## Import libraries...
+The most important library for this model is the caret package, that allows uniform evaluation and comparison of multiple models. This report addresses a random forest approach and a KNN model, however more models can be chosen for the purpose of learning.
+
+The model was done under Mac OS X, with  3.06 GHz Intel Core i3, 4 GB RAM. This allowed using the doMC library to utilize multiple cores that expedites the computation. Initially a 10-fold cross-validation was attempted, that consumed substantial time, therefore only a 5-fold cross-validation is adopted.
+
+```{r}
+library(caret)
+library(ggplot2)
+library(gridExtra)
+library(randomForest)
+library(knitr)
+
+library(doMC)
+registerDoMC(cores = 4)
+
+set.seed(1408)
+
+```
+
+## Data processing
+The data is imported from hard drive and into to R memory. The data can also be imported directly from the URL as well.
+```{r}
+training <- read.csv("~/Dropbox/Coursera/Practical Machine Learning/Project/pml-training.csv")
+testing <- read.csv("~/Dropbox/Coursera/Practical Machine Learning/Project/pml-testing.csv")
+
+```
+
+Inspecting the data, several column vectors that are empty and with NA values are found. This can be dealt with by specifying na.strings during import itself.
+
+```{r}
+training <- read.csv("~/Dropbox/Coursera/Practical Machine Learning/Project/pml-training.csv", na.strings = c(NA, '', '#DIV/0!'))
+testing <- read.csv("~/Dropbox/Coursera/Practical Machine Learning/Project/pml-testing.csv", , na.strings = c(NA, '', '#DIV/0!'))
+dim(training); dim(testing)
+
+```
+
+Examining the data suggests there are still columns with high percentage of NA values. Columns with more than 90% of valid data will be selected.
+```{r}
+training <- training[ , (nrow(training) - colSums(is.na(training)))/nrow(training) > 0.9]
+testing  <-  testing[ , (nrow(testing) - colSums(is.na(testing)))/nrow(testing) > 0.9]
+dim(training); dim(testing)
+
+```
+
+## Plot the interactions by user, by classe.
+```{r,echo=FALSE}
+grid_arrange_shared_legend <- function(...) {
+  plots <- list(...)
+  g <- ggplotGrob(plots[[1]] + theme(legend.position="bottom"))$grobs
+  legend <- g[[which(sapply(g, function(x) x$name) == "guide-box")]]
+  lheight <- sum(legend$height)
+  grid.arrange(
+    do.call(arrangeGrob, lapply(plots, function(x)
+      x + theme(legend.position="none"))),
+    legend,
+    ncol = 1,
+    heights = unit.c(unit(1, "npc") - lheight, lheight))
+}
+```
+
+Examining the following plots, where the sum total value from the sensor data are plotted for each user, factored by the classe variable, suggests some similarity in how the subjects reacted to each of the exercise class.
+```{r ggplot, fig.align='center',fig.height=4,fig.width=5}
+plot1 <- ggplot(data = training, aes(x = user_name, y = total_accel_belt)) + geom_point(aes(colour = classe))
+plot2 <- ggplot(data = training, aes(x = user_name, y = total_accel_arm)) + geom_point(aes(colour = classe))
+plot3 <- ggplot(data = training, aes(x = user_name, y = total_accel_dumbbell)) + geom_point(aes(colour = classe))
+plot4 <- ggplot(data = training, aes(x = user_name, y = total_accel_forearm)) + geom_point(aes(colour = classe))
+```
+
+```{r cache = TRUE, fig.align='center',fig.height=4,fig.width=5}
+grid_arrange_shared_legend(plot1, plot2, plot3, plot4)
+```
+
+On a much closer look, faceting by the classe variable, the derivate feature of the accelerometer, suggests that each classe had an unique signature. This lends promise for further modeling and the type of activity can be predicted from the derivate accelerometer data, which happens to be the objective of this exercise.
+```{r gglplot, fig.align='center',fig.height=4,fig.width=5}
+ggplot(data = training, aes(x = total_accel_belt, y = accel_belt_x )) + geom_point() + facet_wrap(~classe, nrow =1)
+ggplot(data = training, aes(x = total_accel_forearm, y = pitch_forearm )) + geom_point() + facet_wrap(~classe, nrow =1)
+ggplot(data = training, aes(x = total_accel_dumbbell, y = magnet_dumbbell_z )) + geom_point() + facet_wrap(~classe, nrow =1)
+```
+
+Now lets remove the columns that will not be used in prediction. The first 7 columns contain user information and cannot be used in model predictions.
+```{r}
+training <- training[ , 8:60]
+testing  <-  testing[ , 8:60]
+dim(training); dim(testing)
+
+```
+
+Convert the response variable to a factor variable, to be predicted.
+```{r}
+training$classe <- factor(training$classe)
+
+```
+
+Create partition of the training data for model building and validation.
+```{r}
+inTrain <- createDataPartition(training$classe, p = 3/4, list = FALSE)
+myTraining <- training[ inTrain, ]
+myTesting  <- training[-inTrain, ]
+
+```
+
+## Create models for prediction:
+The goal of the project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases. 
+
+caret package allows us to specify a trainControl function that can be applied across all model predictions. Lets define the trainControl parameter, using a 5-fold cross-validation
+
+```{r}
+trnCtrl <- trainControl(method = 'cv',
+                        number = 5,
+                        allowParallel = TRUE,
+                        verboseIter = TRUE)
+```
+
+### Model 1 - Random Forest
+```{r}
+model1 <- train(classe ~ .,
+                data = myTraining,
+                method = 'rf',
+                trControl = trnCtrl)
+```
+
+### Model 2 - K-nearest neighbor
+```{r}
+model2 <- train(classe ~ .,
+                data = myTraining,
+                method = 'knn',
+                trControl = trnCtrl)
+```
+
+## Final results
+
+Comparison of the two models
+```{r}
+model1Pred <- predict(model1, myTesting)
+model2Pred <- predict(model2, myTesting)
+
+confusionMatrix(model1Pred, myTesting$classe)
+confusionMatrix(model2Pred, myTesting$classe)
+```
+
+The summary of accuracy of the two models are:
+```{r, results='asis'}
+kable(data.frame(Model = c('RF', 'KNN'),
+                 Accuracy = c(confusionMatrix(model1Pred, myTesting$classe)$overall[1],
+                              confusionMatrix(model2Pred, myTesting$classe)$overall[1])))
+```
+
+The RF model is more accurate than the KNN model.
+
+### Prediction on the provided testing dataset
+```{r}
+model1Pred.test <- predict(model1, testing)
+model2Pred.test <- predict(model2, testing)
+```
+
+The two models compares as follows on the test data:
+```{r, results='asis'}
+knitr::kable(data.frame(rf.pred = model1Pred.test, knn.pred = model2Pred.test))
+```
+
+They conform with each other well, though the accuracy of RF model is slightly higher than KNN model and should be chosen between the two.
+
+## Function to generate files with prediction for submission
+```{r}
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(model1Pred.test)
+```
