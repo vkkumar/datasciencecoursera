@@ -36,7 +36,7 @@ plot(dfFebHPC$Voltage ~ dfFebHPC$dateTime,
      xlab="datetime")
 
 # Plot the bottom left data!
-with(dfFebHPC, plot(Sub_metering_1 ~ dateTime, type = 'l', ylab = "Global Active Power (kilowatts)", xlab = "" ))
+with(dfFebHPC, plot(Sub_metering_1 ~ dateTime, type = 'l', ylab = "Energy sub metering", xlab = "" ))
 with(dfFebHPC, lines(Sub_metering_2 ~ dateTime, col = 'red'))
 with(dfFebHPC, lines(Sub_metering_3 ~ dateTime, col = 'Blue'))
 
@@ -46,7 +46,7 @@ legend("topright", col=c("black", "red", "blue"), lty=1, lwd=2,
 # Plot the bottom right data!
 plot(dfFebHPC$Global_reactive_power ~ dfFebHPC$dateTime,
      type = 'l',
-     ylab="Global Active Power",
+     ylab = 'Global_reactive_power',
      xlab="datetime")
 
 # Copy to a png file

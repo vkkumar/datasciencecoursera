@@ -24,7 +24,7 @@ dfFebHPC$dateTime = as.POSIXct(dateTime)
 par(mfrow = c(1,1))
 
 # Plot the data!
-with(dfFebHPC, plot(Sub_metering_1 ~ dateTime, type = 'l', ylab = "Global Active Power (kilowatts)", xlab = "" ))
+with(dfFebHPC, plot(Sub_metering_1 ~ dateTime, type = 'l', ylab = "Energy sub metering", xlab = "" ))
 with(dfFebHPC, lines(Sub_metering_2 ~ dateTime, col = 'red'))
 with(dfFebHPC, lines(Sub_metering_3 ~ dateTime, col = 'Blue'))
 
