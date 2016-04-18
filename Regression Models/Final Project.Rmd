@@ -1,0 +1,108 @@
+---
+title: "Regression Models - Project"
+author: "Krishna V Iyer"
+date: "April 17, 2016"
+output: html_document
+---
+## Data
+The data was extracted from the 1974 Motor Trend US magazine, and comprises fuel consumption and 10 aspects of automobile design and performance for 32 automobiles (1973–74 models).
+
+##  The Task  
+Examine the `mtcars` data set for relationships between a set of variables and miles per gallon (mpg). Employ Regression models to analyze how the **Transmission** factor variable [**automatic** (am = 0) and **manual** (am = 1)] affects the **mpg** variable.
+
+## Exploratory Data Analysis
+Load the data and libraries. Identify and covert factor variables.
+```{r}
+library(ggplot2)
+library(GGally)
+data(mtcars)
+head(mtcars) # Sample Data
+dim(mtcars)
+mtcars$cyl <- as.factor(mtcars$cyl)
+mtcars$vs <- as.factor(mtcars$vs)
+mtcars$am <- factor(mtcars$am)
+mtcars$gear <- factor(mtcars$gear)
+mtcars$carb <- factor(mtcars$carb)
+```
+
+## Null Hypothesis  
+The **mpg** does not depend on the type of transmission of the automobile. The assumption is the distribution is normal and the sample is representative of the population
+```{r}
+result <- t.test(mpg ~ am, mtcars)
+result$p.value
+result$estimate
+```  
+The p-value is about 0.001, and hence the null hypothesis is rejected. The means of the two samples differ by 7 mpg, the **automatic** transmission fairing better than the **manual** transmission.
+
+## Exploratory plotting of Data
+### Boxplot of MPG vs. Transmission  
+```{r}
+boxplot(mpg ~ am, mtcars, xlab="Transmission (0 = Automatic, 1 = Manual)", ylab="mpg",
+        main="MPG vs. Transmission")
+```
+
+It is now clear that the differnce is statistically significant. Lets examine the data further to see if there are any other relationships between variables before proceeding with modeling them. The most informative plot is that can plot pairwise relationships between variables.
+
+### Pairplots of all variables in mpg dataset
+```{r}
+pairs(mtcars, panel=panel.smooth, pch = 21, cex=1.2, bg = c('red', 'blue') )[unclass(mtcars$am)]
+```  
+We can see some relationships between mpg and cyl, disp, hp and am. Lets examine this further.
+
+### Pairplots of select variables in mpg dataset
+```{r}
+pairs(mtcars[, c(1, 2, 3, 4, 6, 9)], panel=panel.smooth, pch = 21, cex=1.2, bg = c('red', 'blue') )[unclass(mtcars$am)]
+```  
+At this point, we can clearly see a definite relationship. However, there are interactions between these variables that needs to be considered. The model should be able to address this. Lets now proceed with the model.
+
+## Regression Analysis  
+Lets start by fitting a full model...
+```{r}
+model0 <- lm(mpg ~ ., data=mtcars)
+summary(model0)
+```  
+The full model has an Adjusted R-squared value is 0.779, which means that the model can explain about 78% of the variance of the MPG variable. It is interesting to note that none of the variables are coming out as significant estimator of the the label. This means that all the variables together does not seem to predict the outcome. Colinearity is one concern and some variables might not add to additional information. This can be addressed by stepwise regression analyis.
+
+A stepwise regression of the full model is done as follows:
+```{r}
+stepModel <- step(model0, k=log(nrow(mtcars)))
+summary(stepModel)
+```  
+AIC is a goodness of fit measure that favours smaller residual error in the model, but penalises for including further predictors and helps avoiding overfitting. The model "mpg ~ wt + qsec + am" has the lowest AIC, and this model can explain about 83% of the variance of the mpg variable. All of the coefficients are significant with p-value less than 0.05.    
+
+According to the pair plot, it appears that there is an interaction term between "wt" variable and "am" variables. This can be due to the fact that cars with automatic transmission tend to weigh heavier than cars with manual transmission. The new model is done as follows:
+```{r}
+model1 <-lm(mpg ~ wt + qsec + am + wt:am, data=mtcars)
+summary(model1)
+```  
+This model's Adjusted R-squared value is 0.8804, which means it can explain about 88% of the variance in the value of the label. 
+
+For understanding how the identified model performs in comparison to the baseline we which is fitting the label to 'am' variable only.
+```{r}
+model2 <-lm(mpg ~ am, data=mtcars)
+summary(model2)
+```  
+Though the model can separate the two types of transmission, the Adjusted R-squared value drops to 0.3385. This suggests the previous model might perform better for the given dataset.
+
+Finally, we select the final model.  
+```{r}
+anova(model0, stepModel, model1, model2) 
+confint(model1)
+```  
+
+We end up selecting the model with the highest Adjusted R-squared value, "mpg ~ wt + qsec + am + wt:am".  
+```{r}
+summary(model1)$coef
+```  
+Thus, the result shows that when "wt" (weight lb/1000) and "qsec" (1/4 mile time) remain constant, cars with manual transmission add about 7 mpg (miles per gallon) more on average than cars with automatic transmission.
+
+## Residual Analysis and Diagnostics
+```{r}
+par(mfrow = c(2, 2))
+plot(model1)
+```
+
+1. The Residuals vs. Fitted plot suggests no underlying pattern in the data
+2. The Normal Q-Q plot indicates that the residuals are normally distributed
+3. The Scale-Location plot confirms the constant variance assumption, as the points are randomly distributed.  
+4. The Residuals vs. Leverage suggests that no outliers are present
